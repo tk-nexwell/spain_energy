@@ -34,7 +34,11 @@ def load_data(indicator_id: int) -> pd.DataFrame:
     conn = sqlite3.connect(DB_PATH)
     try:
         table = get_table_name(indicator_id)
-        df = pd.read_sql(f"SELECT * FROM {table} ORDER BY datetime", conn)
+        try:
+            df = pd.read_sql(f"SELECT * FROM {table} ORDER BY datetime", conn)
+        except Exception:
+            # Table for this indicator does not exist yet or query failed
+            return pd.DataFrame()
     finally:
         conn.close()
 
@@ -105,7 +109,7 @@ def main() -> None:
         chart_df = df_filtered[["datetime_parsed", "price_eur_per_mwh"]].copy()
         chart = (
             alt.Chart(chart_df)
-            .mark_line()
+            .mark_circle(size=20)
             .encode(
                 x=alt.X(
                     "datetime_parsed:T",
@@ -188,7 +192,16 @@ def main() -> None:
             )
             .properties(height=250)
         )
-        st.altair_chart(monthly_chart, use_container_width=True)
+        monthly_text = (
+            alt.Chart(monthly_agg)
+            .mark_text(baseline="bottom", dy=-5)
+            .encode(
+                x="year_month:T",
+                y="price_eur_per_mwh:Q",
+                text=alt.Text("price_eur_per_mwh:Q", format=".1f"),
+            )
+        )
+        st.altair_chart(monthly_chart + monthly_text, use_container_width=True)
 
         st.subheader("Average price by calendar month (Jan–Dec)")
         # Average each calendar month over years in the window
@@ -216,7 +229,8 @@ def main() -> None:
             .encode(
                 x=alt.X("month_name:O", title="Calendar month"),
                 y=alt.Y(
-                    "avg_price_month:Q", title="Average price (€/MWh), per calendar month"
+                    "avg_price_month:Q",
+                    title="Average price (€/MWh)",
                 ),
                 tooltip=[
                     alt.Tooltip("month_name:O", title="Month"),
@@ -229,7 +243,16 @@ def main() -> None:
             )
             .properties(height=250)
         )
-        st.altair_chart(month_chart2, use_container_width=True)
+        month_text = (
+            alt.Chart(cal_month)
+            .mark_text(baseline="bottom", dy=-5)
+            .encode(
+                x="month_name:O",
+                y="avg_price_month:Q",
+                text=alt.Text("avg_price_month:Q", format=".1f"),
+            )
+        )
+        st.altair_chart(month_chart2 + month_text, use_container_width=True)
 
         st.subheader("Daily average price")
         daily = df_filtered.copy()
@@ -244,7 +267,7 @@ def main() -> None:
                 x=alt.X(
                     "date:T",
                     title="Date",
-                    axis=alt.Axis(format="%Y-%m-%d", labelAngle=-45),
+                    axis=alt.Axis(format="%b-%y", labelAngle=-45),
                 ),
                 y=alt.Y("price_eur_per_mwh:Q", title="Average price (€/MWh)"),
                 tooltip=[

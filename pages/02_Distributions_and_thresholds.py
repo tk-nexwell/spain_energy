@@ -156,13 +156,11 @@ def main() -> None:
 
     # Build histogram where values outside [x_min, x_max] are clipped into
     # the first/last bin so total hours are conserved.
-    hist_chart = (
+    hist_source = (
         alt.Chart(hourly_base)
         .transform_calculate(
             price_clipped=f"clamp(datum.price_eur_per_mwh, {x_min}, {x_max})"
         )
-        # First positional arg is the output field(s), second is the source field.
-        # Here we ask Altair/Vega-Lite to produce both bin_start and bin_end.
         .transform_bin(
             ["bin_start", "bin_end"],
             "price_clipped",
@@ -172,23 +170,45 @@ def main() -> None:
             count="count()",
             groupby=["bin_start", "bin_end"],
         )
-        .mark_bar()
+        .transform_calculate(
+            percent="datum.count / {} * 100".format(total_hours_sel)
+            if total_hours_sel > 0
+            else "0",
+            bin_label='format(datum.bin_start, ".2f") + "–" + format(datum.bin_end, ".2f") + " €/MWh [inclusive of lower, exclusive of upper]"',
+        )
+    )
+
+    hist_count = (
+        hist_source.mark_bar()
         .encode(
-            x=alt.X(
-                "bin_start:Q",
-                title="Price (€/MWh)",
-            ),
+            x=alt.X("bin_start:Q", title="Price (€/MWh)"),
             x2="bin_end:Q",
             y=alt.Y("count:Q", title="Number of hours"),
             tooltip=[
-                alt.Tooltip("bin_start:Q", title="From (€/MWh)", format=".2f"),
-                alt.Tooltip("bin_end:Q", title="To (€/MWh)", format=".2f"),
+                alt.Tooltip("bin_label:N", title="Bin"),
                 alt.Tooltip("count:Q", title="Hours"),
+                alt.Tooltip("percent:Q", title="Percent", format=".0f"),
             ],
         )
         .properties(height=300)
     )
-    st.altair_chart(hist_chart, use_container_width=True)
+
+    hist_pct = (
+        hist_source.mark_line(color="red")
+        .encode(
+            x=alt.X("bin_start:Q", title="Price (€/MWh)"),
+            y=alt.Y(
+                "percent:Q",
+                title="Percent of hours",
+                axis=alt.Axis(titleColor="red", orient="right", format=".0f"),
+            ),
+        )
+    )
+
+    st.altair_chart(
+        alt.layer(hist_count, hist_pct).resolve_scale(y="independent"),
+        use_container_width=True,
+    )
 
     st.subheader("Hours at or below price threshold")
 
@@ -319,6 +339,17 @@ def main() -> None:
         lambda m: datetime(2000, m, 1).strftime("%b")
     )
     month_title = "Avg hours ≤ threshold per calendar month"
+    # share of hours across calendar months
+    total_hours_months = month_avg["hours_avg"].sum()
+    if total_hours_months > 0:
+        month_avg["percent"] = month_avg["hours_avg"] / total_hours_months * 100
+    else:
+        month_avg["percent"] = 0.0
+    month_avg["label"] = month_avg.apply(
+        lambda r: f"{int(round(r['hours_avg']))}h, {int(round(r['percent']))}%",
+        axis=1,
+    )
+
     month_chart = (
         alt.Chart(month_avg)
         .mark_bar()
@@ -345,11 +376,21 @@ def main() -> None:
             tooltip=[
                 alt.Tooltip("month_name:O", title="Month"),
                 alt.Tooltip("hours_avg:Q", title="Avg hours", format=".1f"),
+                alt.Tooltip("percent:Q", title="Percent", format=".0f"),
             ],
         )
         .properties(height=250)
     )
-    st.altair_chart(month_chart, use_container_width=True)
+    month_text = (
+        alt.Chart(month_avg)
+        .mark_text(baseline="bottom", dy=-5)
+        .encode(
+            x="month_name:O",
+            y="hours_avg:Q",
+            text="label:N",
+        )
+    )
+    st.altair_chart(month_chart + month_text, use_container_width=True)
 
     # Daily counts
     st.markdown("**By day**")
@@ -423,24 +464,8 @@ def main() -> None:
             text=alt.Text("hours:Q", format=".0f"),
         )
     )
-    hourly_pct_chart = (
-        alt.Chart(hourly)
-        .mark_line(color="red")
-        .encode(
-            x=alt.X("hour:O", title="Hour of day"),
-            y=alt.Y(
-                "percent:Q",
-                title=y_title_h_pct,
-                axis=alt.Axis(titleColor="red", orient="right", format=".0f"),
-            ),
-        )
-    )
-    st.altair_chart(
-        alt.layer(hourly_hours_chart, hourly_text, hourly_pct_chart).resolve_scale(
-            y="independent"
-        ),
-        use_container_width=True,
-    )
+    # Simplify: keep only bar chart with labels and tooltip including percent
+    st.altair_chart(hourly_hours_chart + hourly_text, use_container_width=True)
 
 
 if __name__ == "__main__":
