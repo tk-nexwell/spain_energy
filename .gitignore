@@ -1,4 +1,1 @@
-data/*.db
-data/*.sqlite
-*.db
-"data/*.db" 
+".env" 
