@@ -2,6 +2,9 @@ import sqlite3
 from datetime import datetime, time, timedelta
 
 import altair as alt
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
 import streamlit as st
 
@@ -127,7 +130,8 @@ def main() -> None:
         pct_sel = 0.0
 
     st.markdown(
-        f"**Total hours in selection: {total_hours_sel} ({pct_sel:.0f}% of all hours)**"
+        f"<h3 style='font-weight:700;'>Total hours in selection: {total_hours_sel} ({pct_sel:.0f}% of all hours)</h3>",
+        unsafe_allow_html=True,
     )
 
     st.subheader("Price distribution (histogram)")
@@ -156,59 +160,57 @@ def main() -> None:
 
     # Build histogram where values outside [x_min, x_max] are clipped into
     # the first/last bin so total hours are conserved.
-    hist_source = (
-        alt.Chart(hourly_base)
-        .transform_calculate(
-            price_clipped=f"clamp(datum.price_eur_per_mwh, {x_min}, {x_max})"
-        )
-        .transform_bin(
-            ["bin_start", "bin_end"],
-            "price_clipped",
-            bin=alt.Bin(extent=[x_min, x_max], step=bin_width),
-        )
-        .transform_aggregate(
-            count="count()",
-            groupby=["bin_start", "bin_end"],
-        )
-        .transform_calculate(
-            percent="datum.count / {} * 100".format(total_hours_sel)
-            if total_hours_sel > 0
-            else "0",
-            bin_label='format(datum.bin_start, ".2f") + "–" + format(datum.bin_end, ".2f") + " €/MWh [inclusive of lower, exclusive of upper]"',
-        )
+    prices = np.clip(
+        hourly_base["price_eur_per_mwh"].to_numpy(dtype=float), x_min, x_max
+    )
+    bins = np.arange(x_min, x_max + bin_width, bin_width)
+    counts, edges = np.histogram(prices, bins=bins)
+    if total_hours_sel > 0:
+        perc = counts / total_hours_sel * 100.0
+    else:
+        perc = np.zeros_like(counts, dtype=float)
+
+    bin_centers = (edges[:-1] + edges[1:]) / 2.0
+    bin_labels = [
+        f"{edges[i]:.2f}–{edges[i+1]:.2f} €/MWh [inclusive of lower, exclusive of upper]"
+        for i in range(len(edges) - 1)
+    ]
+
+    fig_hist = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_hist.add_bar(
+        x=bin_centers,
+        y=counts,
+        name="Hours",
+        marker_color="#1f77b4",
+        customdata=np.stack(
+            [edges[:-1], edges[1:], np.round(perc).astype(int)], axis=-1
+        ),
+        hovertemplate=(
+            "Bin: %{customdata[0]:.2f}–%{customdata[1]:.2f} €/MWh "
+            "[inclusive of lower, exclusive of upper]"
+            "<br>Hours: %{y}"
+            "<br>Percent: %{customdata[2]}%<extra></extra>"
+        ),
     )
 
-    hist_count = (
-        hist_source.mark_bar()
-        .encode(
-            x=alt.X("bin_start:Q", title="Price (€/MWh)"),
-            x2="bin_end:Q",
-            y=alt.Y("count:Q", title="Number of hours"),
-            tooltip=[
-                alt.Tooltip("bin_label:N", title="Bin"),
-                alt.Tooltip("count:Q", title="Hours"),
-                alt.Tooltip("percent:Q", title="Percent", format=".0f"),
-            ],
-        )
-        .properties(height=300)
+    fig_hist.update_xaxes(title_text="Price (€/MWh)")
+    fig_hist.update_yaxes(title_text="Hours", secondary_y=False)
+    fig_hist.update_yaxes(
+        title_text="Percent of hours",
+        secondary_y=True,
+        range=[0, 100],
+        ticksuffix="%",
+        showgrid=False,
+    )
+    fig_hist.update_layout(
+        showlegend=False,
+        bargap=0,
+        bargroupgap=0,
+        margin=dict(l=60, r=60, t=10, b=50),
+        height=300,
     )
 
-    hist_pct = (
-        hist_source.mark_line(color="red")
-        .encode(
-            x=alt.X("bin_start:Q", title="Price (€/MWh)"),
-            y=alt.Y(
-                "percent:Q",
-                title="Percent of hours",
-                axis=alt.Axis(titleColor="red", orient="right", format=".0f"),
-            ),
-        )
-    )
-
-    st.altair_chart(
-        alt.layer(hist_count, hist_pct).resolve_scale(y="independent"),
-        use_container_width=True,
-    )
+    st.plotly_chart(fig_hist, use_container_width=True)
 
     st.subheader("Hours at or below price threshold")
 
