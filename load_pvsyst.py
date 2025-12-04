@@ -8,7 +8,8 @@ import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
 PV_DIR = BASE_DIR / "pv_prod"
-DB_PATH = BASE_DIR / "data" / "pv.db"
+# Use the unified data DB for PV profiles as well
+DB_PATH = BASE_DIR / "data" / "data.db"
 PROFILES_TABLE = "pv_profiles"
 
 
