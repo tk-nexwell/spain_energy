@@ -879,8 +879,10 @@ def main() -> None:
     available_cols = [c for c in cols if c in display_df.columns]
     st.dataframe(display_df[available_cols], use_container_width=True, height=400)
     
-    # For CSV export, use the same clean dataframe
-    csv = display_df[available_cols].to_csv(index=False).encode("utf-8")
+    # Format datetime for CSV export
+    from utils import format_datetime_for_csv
+    df_export = format_datetime_for_csv(display_df[available_cols])
+    csv = df_export.to_csv(index=False).encode("utf-8")
     start_date_str = start_dt.strftime("%Y-%m-%d")
     end_date_str = end_dt.strftime("%Y-%m-%d")
     st.download_button(

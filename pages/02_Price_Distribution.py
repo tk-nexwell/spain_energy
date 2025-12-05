@@ -141,12 +141,33 @@ def main() -> None:
     price_min = float(hourly_base["price_eur_per_mwh"].min())
     price_max = float(hourly_base["price_eur_per_mwh"].max())
 
+    # Use session state to persist slider value across reruns
+    # Key includes source so each data source has its own slider state
+    slider_key = f"price_range_slider_{source}"
+    
+    # Get current slider value from session state, or use defaults if not set
+    if slider_key not in st.session_state:
+        # First time for this source, use full range
+        default_value = (price_min, price_max)
+    else:
+        # Get stored value and validate it's within current bounds
+        stored_min, stored_max = st.session_state[slider_key]
+        # Clamp to current bounds if data range changed
+        stored_min = max(price_min, min(stored_min, price_max))
+        stored_max = min(price_max, max(stored_max, price_min))
+        # Ensure min <= max
+        if stored_min > stored_max:
+            default_value = (price_min, price_max)
+        else:
+            default_value = (stored_min, stored_max)
+    
     x_min, x_max = st.slider(
         "Price range for histogram (€/MWh)",
         min_value=price_min,
         max_value=price_max,
-        value=(price_min, price_max),
+        value=default_value,
         step=0.5,
+        key=slider_key,
     )
 
     bin_width = st.slider(

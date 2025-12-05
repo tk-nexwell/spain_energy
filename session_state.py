@@ -196,6 +196,7 @@ def get_date_range_selector(source: DataSource) -> tuple[datetime, datetime]:
     if calendar_differs_from_state and widget_calendar_value is not None:
         cal_sync_start, cal_sync_end = parse_date_range(widget_calendar_value)
         # Update slider key to match calendar before creating slider
+        # Set it in session state so the slider will use it via its key
         st.session_state[widget_slider_key] = (cal_sync_start, cal_sync_end)
         # Also update session state to match
         st.session_state.date_range_start = cal_sync_start
@@ -205,36 +206,78 @@ def get_date_range_selector(source: DataSource) -> tuple[datetime, datetime]:
     elif slider_differs_from_state and widget_slider_value is not None:
         slider_sync_start, slider_sync_end = parse_date_range(widget_slider_value)
         # Update calendar key to match slider before creating calendar
+        # Set it in session state so the calendar will use it via its key
         st.session_state[widget_calendar_key] = (slider_sync_start, slider_sync_end)
         # Also update session state to match
         st.session_state.date_range_start = slider_sync_start
         st.session_state.date_range_end = slider_sync_end
         current_start, current_end = slider_sync_start, slider_sync_end
     
+    # Validate and clean up stored widget values if they're out of bounds
+    # This prevents errors when switching data sources with different date ranges
+    def validate_and_clean_widget_value(widget_key, default_value, min_val, max_val):
+        """Validate stored widget value is within bounds, return valid value or default."""
+        if widget_key in st.session_state:
+            stored_value = st.session_state[widget_key]
+            try:
+                stored_start, stored_end = parse_date_range(stored_value)
+                # Validate stored value is within current bounds
+                if (min_val <= stored_start <= max_val and 
+                    min_val <= stored_end <= max_val and
+                    stored_start <= stored_end):
+                    return (stored_start, stored_end)
+                else:
+                    # Out of bounds, remove from session state so we use default
+                    del st.session_state[widget_key]
+            except (ValueError, TypeError, AttributeError):
+                # Invalid stored value, remove it
+                del st.session_state[widget_key]
+        return default_value
+    
     # Calendar picker
     st.sidebar.markdown("**Date range (calendar)**")
-    date_range_calendar = st.sidebar.date_input(
-        "Select dates",
-        value=(current_start, current_end),
-        min_value=min_date,
-        max_value=max_date,
-        key=widget_calendar_key,
-        help="Click to open calendar picker. Select start and end dates.",
-        label_visibility="collapsed",
+    # Validate stored calendar value, clean if invalid
+    calendar_default = (current_start, current_end)
+    calendar_valid_value = validate_and_clean_widget_value(
+        widget_calendar_key, calendar_default, min_date, max_date
     )
+    
+    calendar_kwargs = {
+        "label": "Select dates",
+        "min_value": min_date,
+        "max_value": max_date,
+        "key": widget_calendar_key,
+        "help": "Click to open calendar picker. Select start and end dates.",
+        "label_visibility": "collapsed",
+    }
+    # Only pass value parameter if widget key doesn't exist in session state
+    # (after validation/cleaning, invalid values are removed)
+    if widget_calendar_key not in st.session_state:
+        calendar_kwargs["value"] = calendar_valid_value
+    date_range_calendar = st.sidebar.date_input(**calendar_kwargs)
     
     # Slider
     st.sidebar.markdown("**Date range (slider)**")
-    date_range_slider = st.sidebar.slider(
-        "Select date range",
-        min_value=min_date,
-        max_value=max_date,
-        value=(current_start, current_end),
-        format="YYYY-MM-DD",
-        key=widget_slider_key,
-        help="Drag to adjust date range quickly.",
-        label_visibility="collapsed",
+    # Validate stored slider value, clean if invalid
+    slider_default = (current_start, current_end)
+    slider_valid_value = validate_and_clean_widget_value(
+        widget_slider_key, slider_default, min_date, max_date
     )
+    
+    slider_kwargs = {
+        "label": "Select date range",
+        "min_value": min_date,
+        "max_value": max_date,
+        "format": "YYYY-MM-DD",
+        "key": widget_slider_key,
+        "help": "Drag to adjust date range quickly.",
+        "label_visibility": "collapsed",
+    }
+    # Only pass value parameter if widget key doesn't exist in session state
+    # (after validation/cleaning, invalid values are removed)
+    if widget_slider_key not in st.session_state:
+        slider_kwargs["value"] = slider_valid_value
+    date_range_slider = st.sidebar.slider(**slider_kwargs)
     
     # Parse both widget values
     cal_start, cal_end = parse_date_range(date_range_calendar)

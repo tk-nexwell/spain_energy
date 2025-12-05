@@ -301,9 +301,21 @@ def load_pv_profile(profile_col: str) -> pd.DataFrame:
 
 
 def join_price_with_pv(prices: pd.DataFrame, pv: pd.DataFrame) -> pd.DataFrame:
-    """Join price time series with PV profile on (month, day, hour)."""
+    """
+    Join price time series with PV profile on (month, day, hour).
+    
+    Filters out rows where price_eur_per_mwh is NULL before joining,
+    so that PV production is only included when there's a valid price.
+    """
     if prices.empty or pv.empty:
         return prices.iloc[0:0].copy()
+
+    # Filter out NULL prices before joining
+    # This ensures PV production is only included when there's a valid price
+    prices = prices[prices["price_eur_per_mwh"].notna()].copy()
+    
+    if prices.empty:
+        return prices
 
     pv_keys = pv[["month", "day"]].drop_duplicates()
     has_feb29 = ((pv_keys["month"] == 2) & (pv_keys["day"] == 29)).any()

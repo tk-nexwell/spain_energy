@@ -254,7 +254,10 @@ def main() -> None:
     # Raw data and download
     st.subheader("Raw PV production data")
     st.dataframe(df_long, use_container_width=True, height=400)
-    csv = df_long.to_csv(index=False).encode("utf-8")
+    # Format datetime for CSV export if datetime column exists
+    from utils import format_datetime_for_csv
+    df_export = format_datetime_for_csv(df_long)
+    csv = df_export.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download PV production data as CSV",
         data=csv,

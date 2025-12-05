@@ -52,10 +52,10 @@ def import_baringa():
     df['hour'] = df['Period']
     df['minute'] = 0
     
-    # Create datetime string
+    # Create datetime string in format matching historical_prices table
     df['datetime'] = pd.to_datetime(
         df[['Year', 'Month', 'Day', 'hour']]
-    ).dt.strftime('%Y-%m-%dT%H:%M:%S')
+    ).dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Rename Reference Case to price_eur_per_mwh
     df = df.rename(columns={'Reference Case': 'price_eur_per_mwh'})
@@ -112,8 +112,8 @@ def import_aurora():
     df['hour'] = df['datetime_parsed'].dt.hour
     df['minute'] = df['datetime_parsed'].dt.minute
     
-    # Create datetime string
-    df['datetime'] = df['datetime_parsed'].dt.strftime('%Y-%m-%dT%H:%M:%S')
+    # Create datetime string in format matching historical_prices table
+    df['datetime'] = df['datetime_parsed'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Rename Price to price_eur_per_mwh
     df = df.rename(columns={'Price': 'price_eur_per_mwh'})

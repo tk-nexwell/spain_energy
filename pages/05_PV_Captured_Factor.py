@@ -336,7 +336,10 @@ def main() -> None:
     ]
     available_cols = [c for c in cols if c in joined_display.columns]
     st.dataframe(joined_display[available_cols], use_container_width=True, height=400)
-    csv = joined_display[available_cols].to_csv(index=False).encode("utf-8")
+    # Format datetime for CSV export
+    from utils import format_datetime_for_csv
+    df_export = format_datetime_for_csv(joined_display[available_cols])
+    csv = df_export.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download PV captured factor data as CSV",
         data=csv,

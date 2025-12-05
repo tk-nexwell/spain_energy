@@ -469,7 +469,10 @@ def main() -> None:
     available_cols = [c for c in cols if c in df_with_metrics.columns]
     st.dataframe(df_with_metrics[available_cols], use_container_width=True, height=400)
     
-    csv = df_with_metrics[available_cols].to_csv(index=False).encode("utf-8")
+    # Format datetime for CSV export
+    from utils import format_datetime_for_csv
+    df_export = format_datetime_for_csv(df_with_metrics[available_cols])
+    csv = df_export.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download PPA data as CSV",
         data=csv,
