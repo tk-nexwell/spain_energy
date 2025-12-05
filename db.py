@@ -6,18 +6,18 @@ import pandas as pd
 
 
 DATA_DIR = Path("data")
-DB_PATH = DATA_DIR / "spot_prices.db"
+DB_PATH = DATA_DIR / "data.db"
 
 
 def get_table_name(indicator_id: int) -> str:
     """
     Return the SQLite table name for a given indicator.
 
-    We keep the existing table `spot_prices` for indicator 600 for backwards
-    compatibility, and use a separate table for other indicators (e.g. 1001).
+    For indicator 600, use the historical_prices table.
+    For other indicators, use separate tables (e.g. spot_prices_1001).
     """
     if indicator_id == 600:
-        return "spot_prices"
+        return "historical_prices"
     return f"spot_prices_{indicator_id}"
 
 
@@ -83,8 +83,44 @@ def insert_prices(df: pd.DataFrame, indicator_id: int) -> None:
     table = get_table_name(indicator_id)
 
     # Ensure we are writing simple strings for the datetime column.
+    # Standardize datetime format to "YYYY-MM-DD HH:MM:SS"
     df_to_write = df.copy()
-    df_to_write["datetime"] = df_to_write["datetime"].astype(str)
+    
+    def standardize_datetime(ts):
+        """Convert datetime to standardized format."""
+        ts_str = str(ts)
+        # Handle ISO format with T and Z
+        if "T" in ts_str:
+            ts_str = ts_str.replace("T", " ")
+        if ts_str.endswith("Z"):
+            ts_str = ts_str[:-1]
+        if "+" in ts_str:
+            ts_str = ts_str.split("+")[0]
+        # Parse and reformat
+        try:
+            from datetime import datetime
+            formats = [
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%dT%H:%M:%SZ",
+                "%Y-%m-%d %H:%M:%S.%f",
+                "%Y-%m-%dT%H:%M:%S.%fZ",
+            ]
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(ts_str, fmt)
+                    return dt.strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    continue
+            # Fallback to fromisoformat
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            if dt.tzinfo:
+                dt = dt.replace(tzinfo=None)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return ts_str  # Return original if parsing fails
+    
+    df_to_write["datetime"] = df_to_write["datetime"].apply(standardize_datetime)
 
     rows = list(
         df_to_write[

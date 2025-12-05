@@ -61,7 +61,51 @@ def transform_indicator_values(values: list[dict]) -> pd.DataFrame:
 
     df = df[
         ["timestamp", "year", "month", "day", "hour", "minute", "value"]
-    ].rename(columns={"timestamp": "datetime", "value": "price_eur_per_mwh"})
+    ].copy()
+    
+    # Standardize datetime format to "YYYY-MM-DD HH:MM:SS"
+    def standardize_datetime(ts_str):
+        """Convert datetime string to standardized format."""
+        ts = str(ts_str)
+        # Handle ISO format with T and Z
+        if "T" in ts:
+            ts = ts.replace("T", " ")
+        if ts.endswith("Z"):
+            ts = ts[:-1]
+        if "+" in ts:
+            ts = ts.split("+")[0]
+        if "-" in ts and len(ts.split("-")) > 3:
+            # Remove timezone offset
+            parts = ts.split("-")
+            if len(parts) > 3:
+                ts = "-".join(parts[:3]) + " " + parts[-1].split(" ")[-1] if " " in parts[-1] else ts
+        
+        # Parse and reformat
+        try:
+            formats = [
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%dT%H:%M:%SZ",
+                "%Y-%m-%d %H:%M:%S.%f",
+                "%Y-%m-%dT%H:%M:%S.%fZ",
+            ]
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(ts, fmt)
+                    return dt.strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    continue
+            # Fallback to fromisoformat
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if dt.tzinfo:
+                dt = dt.replace(tzinfo=None)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return ts  # Return original if parsing fails
+    
+    df["datetime"] = df["timestamp"].apply(standardize_datetime)
+    df = df.rename(columns={"value": "price_eur_per_mwh"})
+    df = df[["datetime", "year", "month", "day", "hour", "minute", "price_eur_per_mwh"]]
     df.sort_values("datetime", inplace=True)
     return df
 
@@ -162,7 +206,7 @@ def main() -> None:
 
     print(
         f"Saved {len(df)} rows to {out_path} "
-        f"and into data/spot_prices.db table for indicator {indicator_id}."
+        f"and into data/data.db table for indicator {indicator_id}."
     )
 
 

@@ -21,9 +21,6 @@ class EsiosConfig:
 # Supported indicators and their human-readable names
 INDICATORS: dict[int, str] = {
     600: "Real-time",
-    612: "Marginal price Intraday market session 1",
-    613: "Marginal price Intraday market session 2",
-    614: "Marginal price Intraday market session 3",
 }
 
 
